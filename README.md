@@ -8,9 +8,11 @@ Once installed, your agent works in the file you have open: create and edit node
 
 Ask your agent (Claude Code, Cursor, Windsurf, Codex — anything that can run a shell):
 
-> Install the Figma bridge from https://github.com/jlefort/figma-bridge
+> Clone https://github.com/jlefort/figma-bridge and follow its AGENTS.md to install the Figma bridge.
 
-It follows [AGENTS.md](AGENTS.md). Or do it yourself — **quit Figma Desktop first**:
+It follows [AGENTS.md](AGENTS.md): it first asks you to quit Figma Desktop and **waits** for your go-ahead, then installs everything, and only hands you manual steps if something actually fails.
+
+Or do it yourself — **quit Figma Desktop first**:
 
 ```bash
 git clone https://github.com/jlefort/figma-bridge.git && cd figma-bridge && ./install.sh

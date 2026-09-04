@@ -12,33 +12,64 @@ Connects Figma Desktop to an MCP client so you can read and write the open Figma
 - **Never ask for the user's Figma token, and never type one yourself.** It's optional (REST reads of files that aren't open). If they want it, tell them to run `./install.sh --token <token>` themselves.
 - Don't hand-edit MCP configs or Figma's `settings.json` — `install.sh` does both.
 - Don't edit the plugin files in `~/.figma-console-mcp/plugin` — the server rewrites them on every start.
-- Running the plugin inside Figma is a click in the app. You can't do it. Say so and stop.
+- Never quit Figma yourself, and never claim the plugin is installed until the installer says so.
 
-## Steps
+## Step 1 — STOP and ask
 
-1. **Have the user quit Figma Desktop** (Cmd+Q / File → Exit) and wait for confirmation. Figma discards outside edits to its settings file while running, which would drop the import. If they'd rather keep it open, the installer detects it and prints the manual clicks instead.
+Before running anything, ask exactly this and **stop your turn**:
 
-2. **Clone.**
-   ```bash
-   git clone --depth 1 https://github.com/jlefort/figma-bridge.git /tmp/figma-bridge
-   ```
+> Is Figma Desktop fully quit? (Cmd+Q on macOS, File → Exit on Windows — closing the window isn't enough.) Tell me when it's closed and I'll install everything.
 
-3. **Run it** — idempotent, allow up to 5 minutes on first run.
-   ```bash
-   bash /tmp/figma-bridge/install.sh
-   ```
-   It checks Node 18+, writes the plugin via `npx -y figma-console-mcp@latest --print-path`, registers the `figma-console` MCP server, then registers the plugin in Figma's development list (three JSON entries in Figma's `settings.json`, backed up first).
+**Do not run a single command until they answer.** The installer imports the plugin into Figma for them, and Figma overwrites its own settings file while running, which silently discards the import.
 
-   Section 4 of the output:
-   - `Imported.` / `Already imported` → continue.
-   - `Figma Desktop is open` → offer both: quit Figma and re-run, or import by hand with the printed path.
-   - anything else → relay the printed manual steps verbatim, with the exact `manifest.json` path.
+They'd rather keep Figma open? Continue anyway, and expect the `Figma Desktop is open` outcome in step 3.
 
-4. **Have them run the plugin:** Figma Desktop → any file → **Plugins → Development → Figma Desktop Bridge** → run, leave running. It connects on its own (WebSocket, ports 9223–9232). One-time — it stays in their Development list.
+## Step 2 — Clone and run
 
-5. **Have them restart the AI client** so it loads the server. If you are that client, say so.
+```bash
+git clone --depth 1 https://github.com/jlefort/figma-bridge.git /tmp/figma-bridge
+bash /tmp/figma-bridge/install.sh
+```
 
-6. **Verify** with `figma_get_status` (or "Check Figma status"). Healthy = active WebSocket transport plus the connected file name. No transport = plugin not running; back to step 4.
+Idempotent. Allow up to 5 minutes on first run. It checks Node 18+, writes the plugin via `npx -y figma-console-mcp@latest --print-path`, registers the `figma-console` MCP server, then registers the plugin in Figma's development list (three JSON entries in Figma's `settings.json`, backed up first).
+
+## Step 3 — Read section 4 of the output
+
+| It says | What you do |
+|---|---|
+| `Imported.` or `Already imported` | Step 4. |
+| `Figma Desktop is open` | **Stop and wait for a green light.** Say: "Figma is still running, so the import was skipped — everything else is done. Quit it completely (Cmd+Q / File → Exit) and tell me when it's closed." On confirmation, re-run the installer and read section 4 again. If they insist on keeping Figma open, use [Manual import](#manual-import). |
+| anything else | [Manual import](#manual-import), and report the reason the installer printed. |
+
+Earlier failures: `Node 18+ is required` → install Node from nodejs.org and re-run. `Could not resolve the plugin manifest` → run `npx -y figma-console-mcp@latest --print-path` and report the real error. `'claude mcp add' failed` → hand over the printed JSON snippet and the client's config path.
+
+## Step 4 — Have them run the plugin
+
+> Figma Desktop → any file → main menu (the Figma logo, top left) → **Plugins → Development → Figma Desktop Bridge** → run it, leave it running. It connects on its own (WebSocket, ports 9223–9232).
+
+One-time — it stays in their Development list.
+
+## Step 5 — Have them restart the AI client
+
+So it loads the new server. If you are that client, say so.
+
+## Step 6 — Verify
+
+`figma_get_status` (or "Check Figma status"). Healthy = active WebSocket transport plus the connected file name. No transport = plugin not running; back to step 4.
+
+## Manual import
+
+Only when the automatic import couldn't run. Give them these three steps, **with the real path pasted in** from the installer's output:
+
+> **1.** In Figma Desktop, open any file. Main menu (the Figma logo, top left) → **Plugins → Development → Import plugin from manifest…**
+>
+> **2.** A file picker opens. The file is in a hidden folder, so don't hunt for it:
+> - **macOS:** press **Cmd+Shift+G**, paste `<MANIFEST PATH>`, press Enter, click **Open**.
+> - **Windows:** paste `<MANIFEST PATH>` into the *File name* field, press Enter.
+>
+> **3.** Main menu → **Plugins → Development → Figma Desktop Bridge** → run it. Leave it running.
+
+Then step 5.
 
 ## Troubleshooting
 

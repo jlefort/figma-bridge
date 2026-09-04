@@ -145,15 +145,19 @@ bold "4. Importing the plugin into Figma Desktop"
 
 manual_import() {
   echo
-  echo "   Do this once, by hand — it takes two clicks:"
+  echo "   Import it by hand — three moves:"
   echo
-  echo "   In Figma Desktop: Plugins → Development → Import plugin from manifest…"
-  echo "   and select this file:"
+  echo "   1. In Figma Desktop, open any file. Main menu (the Figma logo, top left) →"
+  echo "      Plugins → Development → Import plugin from manifest…"
   echo
-  printf '      \033[1m%s\033[0m\n' "$MANIFEST"
+  echo "   2. A file picker opens. Don't go hunting — the folder is hidden. Instead:"
+  echo "        macOS    press Cmd+Shift+G, paste the path below, Enter, then Open"
+  echo "        Windows  paste the path below into the \"File name\" field, then Enter"
   echo
-  echo "   (On macOS the file picker hides dotted folders: press Cmd+Shift+G and paste"
-  echo "    the path above. On Windows, paste it into the file name field.)"
+  printf '        \033[1m%s\033[0m\n' "$MANIFEST"
+  echo
+  echo "   3. Main menu → Plugins → Development → Figma Desktop Bridge → run it."
+  echo "      Leave it running."
 }
 
 REGISTER="$SCRIPT_DIR/lib/register-figma-plugin.mjs"
@@ -178,25 +182,24 @@ else
       ok "Already imported — Figma's plugin list was left untouched."
       IMPORTED="yes" ;;
     20)
-      warn "Figma Desktop is open. It rewrites its settings file as it runs, so the import"
-      echo "      would be lost. Two ways forward:"
+      warn "Figma Desktop is open, so the import was skipped — everything else is done."
+      echo "      Figma rewrites its settings file as it runs and would discard the change."
       echo
-      echo "      • Quit Figma completely (Cmd+Q / File → Exit — not just the window),"
-      echo "        then run this installer again. Everything else is already done."
-      echo "      • Or leave Figma open and import by hand:"
+      echo "      → Quit Figma completely (Cmd+Q, or File → Exit — closing the window is"
+      echo "        not enough), then run this installer again. That is all that's left."
+      echo
+      echo "      Prefer to keep Figma open?"
       manual_import ;;
     30)
       warn "Could not find Figma Desktop's settings file, so the import was skipped."
-      echo "      Launch Figma Desktop once (that creates it) and re-run this installer,"
-      echo "      or just import by hand:"
+      echo "      Launch Figma Desktop once (that creates it), quit it, and re-run this"
+      echo "      installer — or do it by hand now."
       manual_import ;;
     *)
       warn "The automatic import did not go through. Nothing was broken — if Figma's"
       echo "      settings file was touched at all, a copy sits next to it as"
       echo "      settings.json.figma-bridge-backup-*. Reason:"
       detail
-      echo
-      echo "      Import by hand instead:"
       manual_import ;;
   esac
 fi
@@ -207,11 +210,11 @@ bold "5. Last step"
 echo
 if [ "$IMPORTED" = "yes" ]; then
   echo "   Open Figma Desktop (restart it if it was running), then in any file:"
-else
-  echo "   Once the plugin is imported, in any Figma file:"
+  echo "   Plugins → Development → Figma Desktop Bridge — and run it."
+  echo
+  echo "   Leave it running. It finds the server on its own (WebSocket, ports 9223–9232)."
+  echo
 fi
-echo "   Plugins → Development → Figma Desktop Bridge — and run it."
-echo
-echo "   Leave it running. It finds the server on its own (WebSocket, ports 9223–9232)."
-echo "   Then restart your AI client and ask it: \"Check Figma status\""
+echo "   Once the plugin is running, restart your AI client and ask it:"
+echo "   \"Check Figma status\""
 echo
