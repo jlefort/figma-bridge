@@ -1,0 +1,17 @@
+This repository contains only an installer and agent instructions.
+
+The MCP server and the "Figma Desktop Bridge" Figma plugin it installs are a
+separate project:
+
+  figma-console-mcp
+  https://github.com/southleft/figma-console-mcp
+  Copyright (c) 2025 Figma Console MCP Contributors
+  MIT License
+
+No source code from that project is redistributed here. install.sh fetches it
+from the public npm registry (package: figma-console-mcp) at install time, and
+the server itself writes the plugin files into ~/.figma-console-mcp/plugin on
+the user's machine.
+
+This repository is not affiliated with, endorsed by, or maintained by southleft
+or Figma, Inc. "Figma" is a trademark of Figma, Inc.

@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+#
+# Figma Bridge installer.
+#
+# Registers the figma-console MCP server with your AI client, materializes the
+# Figma Desktop Bridge plugin on disk, and prints the manifest path you import
+# in Figma. Safe to re-run: it never overwrites an existing server entry.
+#
+# Usage:
+#   ./install.sh [--token figd_xxx] [--scope user|project|local] [--client claude|manual]
+#
+set -uo pipefail
+
+PKG="figma-console-mcp@latest"
+SERVER_NAME="figma-console"
+TOKEN="${FIGMA_ACCESS_TOKEN:-}"
+SCOPE="user"
+CLIENT="auto"
+
+bold() { printf '\033[1m%s\033[0m\n' "$1"; }
+ok()   { printf '  \033[32m✔\033[0m %s\n' "$1"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$1"; }
+die()  { printf '\n\033[31m✖ %s\033[0m\n' "$1" >&2; exit 1; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --token)   TOKEN="${2:-}"; shift 2 ;;
+    --token=*) TOKEN="${1#*=}"; shift ;;
+    --scope)   SCOPE="${2:-}"; shift 2 ;;
+    --scope=*) SCOPE="${1#*=}"; shift ;;
+    --client)  CLIENT="${2:-}"; shift 2 ;;
+    --client=*) CLIENT="${1#*=}"; shift ;;
+    -h|--help)
+      sed -n '3,10p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) die "Unknown option: $1" ;;
+  esac
+done
+
+echo
+bold "Figma Bridge installer"
+echo
+
+# ---------------------------------------------------------------- 1. preflight
+bold "1. Checking prerequisites"
+
+command -v node >/dev/null 2>&1 || die "Node.js is required. Install Node 18+ from https://nodejs.org"
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+[ "$NODE_MAJOR" -ge 18 ] 2>/dev/null || die "Node 18+ is required (found $(node --version 2>/dev/null || echo none))."
+ok "Node $(node --version)"
+
+command -v npx >/dev/null 2>&1 || die "npx is required (it ships with Node/npm)."
+ok "npx available"
+
+case "$(uname -s)" in
+  Darwin)
+    if [ -d "/Applications/Figma.app" ] || [ -d "$HOME/Applications/Figma.app" ] \
+       || [ -d "/Applications/Figma Beta.app" ]; then
+      ok "Figma Desktop found"
+    else
+      warn "Figma Desktop not found in /Applications — the browser version cannot run development plugins."
+    fi ;;
+  *)
+    warn "Make sure Figma Desktop is installed — the browser version cannot run development plugins." ;;
+esac
+
+# ------------------------------------------------------- 2. materialize plugin
+echo
+bold "2. Fetching the Desktop Bridge plugin"
+echo "   (first run downloads the package — this can take a minute)"
+
+MANIFEST="$(npx -y "$PKG" --print-path 2>/dev/null | tail -n 1 | tr -d '\r')"
+case "$MANIFEST" in
+  */manifest.json) : ;;
+  *) die "Could not resolve the plugin manifest. Run 'npx -y $PKG --print-path' to see the error." ;;
+esac
+[ -f "$MANIFEST" ] || die "Expected a manifest at $MANIFEST but the file is missing."
+ok "Manifest ready: $MANIFEST"
+
+# --------------------------------------------------------- 3. register the MCP
+echo
+bold "3. Registering the MCP server"
+
+AUTODETECTED="no"
+if [ "$CLIENT" = "auto" ]; then
+  AUTODETECTED="yes"
+  if command -v claude >/dev/null 2>&1; then CLIENT="claude"; else CLIENT="manual"; fi
+fi
+
+if [ "$CLIENT" = "claude" ]; then
+  if claude mcp get "$SERVER_NAME" >/dev/null 2>&1; then
+    ok "'$SERVER_NAME' is already configured — left untouched."
+    if [ -n "$TOKEN" ]; then
+      warn "A token was passed but the existing entry was kept. To replace it:"
+      echo "      claude mcp remove $SERVER_NAME -s $SCOPE && ./install.sh --token \"\$YOUR_TOKEN\""
+    fi
+  else
+    set -- claude mcp add "$SERVER_NAME" -s "$SCOPE"
+    [ -n "$TOKEN" ] && set -- "$@" -e "FIGMA_ACCESS_TOKEN=$TOKEN"
+    set -- "$@" -e "ENABLE_MCP_APPS=true" -- npx -y "$PKG"
+    if "$@"; then
+      ok "Added '$SERVER_NAME' to your Claude Code config (scope: $SCOPE)."
+      [ -z "$TOKEN" ] && warn "No Figma token set — optional, see README."
+    else
+      die "'claude mcp add' failed. Add the server manually (see README)."
+    fi
+  fi
+else
+  if [ "$AUTODETECTED" = "yes" ]; then
+    warn "No 'claude' CLI found — add this to your MCP client's config file:"
+  else
+    warn "Add this to your MCP client's config file:"
+  fi
+  cat <<'JSON'
+
+  {
+    "mcpServers": {
+      "figma-console": {
+        "command": "npx",
+        "args": ["-y", "figma-console-mcp@latest"],
+        "env": {
+          "ENABLE_MCP_APPS": "true"
+        }
+      }
+    }
+  }
+
+JSON
+  echo "  Config file locations:"
+  echo "    Claude Desktop  ~/Library/Application Support/Claude/claude_desktop_config.json"
+  echo "    Cursor          ~/.cursor/mcp.json"
+  echo "    Windsurf        ~/.codeium/windsurf/mcp_config.json"
+  echo "    Claude Code     ~/.claude.json"
+  echo
+  echo "  To use the Figma REST API too, add \"FIGMA_ACCESS_TOKEN\": \"figd_...\" next to ENABLE_MCP_APPS."
+fi
+
+# -------------------------------------------------------------- 4. what's left
+echo
+bold "4. Two things left for you to do in Figma"
+echo
+echo "   a. Open Figma Desktop → Plugins → Development → Import plugin from manifest…"
+echo "      and select this file:"
+echo
+printf '         \033[1m%s\033[0m\n' "$MANIFEST"
+echo
+echo "   b. Open any Figma file → Plugins → Development → Figma Desktop Bridge, and run it."
+echo "      Leave it running. It finds the server by itself (WebSocket, ports 9223–9232)."
+echo
+echo "   Then restart your AI client and ask it: \"Check Figma status\""
+echo
