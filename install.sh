@@ -2,12 +2,13 @@
 #
 # Figma Bridge installer.
 #
-# Registers the figma-console MCP server with your AI client, materializes the
-# Figma Desktop Bridge plugin on disk, and prints the manifest path you import
-# in Figma. Safe to re-run: it never overwrites an existing server entry.
+# Registers the figma-console MCP server with your AI client, puts the Figma Desktop
+# Bridge plugin on disk, and imports it into Figma Desktop for you. Safe to re-run:
+# it never overwrites an existing server entry or an existing plugin registration.
 #
 # Usage:
-#   ./install.sh [--token figd_xxx] [--scope user|project|local] [--client claude|manual]
+#   ./install.sh [--token figd_xxx] [--scope user|project|local]
+#                [--client claude|manual] [--no-import]
 #
 set -uo pipefail
 
@@ -16,6 +17,8 @@ SERVER_NAME="figma-console"
 TOKEN="${FIGMA_ACCESS_TOKEN:-}"
 SCOPE="user"
 CLIENT="auto"
+IMPORT="yes"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
 ok()   { printf '  \033[32m✔\033[0m %s\n' "$1"; }
@@ -30,8 +33,9 @@ while [ $# -gt 0 ]; do
     --scope=*) SCOPE="${1#*=}"; shift ;;
     --client)  CLIENT="${2:-}"; shift 2 ;;
     --client=*) CLIENT="${1#*=}"; shift ;;
+    --no-import) IMPORT="no"; shift ;;
     -h|--help)
-      sed -n '3,10p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
@@ -135,17 +139,79 @@ JSON
   echo "  To use the Figma REST API too, add \"FIGMA_ACCESS_TOKEN\": \"figd_...\" next to ENABLE_MCP_APPS."
 fi
 
-# -------------------------------------------------------------- 4. what's left
+# ------------------------------------------------------ 4. import it into Figma
 echo
-bold "4. Two things left for you to do in Figma"
+bold "4. Importing the plugin into Figma Desktop"
+
+manual_import() {
+  echo
+  echo "   Do this once, by hand — it takes two clicks:"
+  echo
+  echo "   In Figma Desktop: Plugins → Development → Import plugin from manifest…"
+  echo "   and select this file:"
+  echo
+  printf '      \033[1m%s\033[0m\n' "$MANIFEST"
+  echo
+  echo "   (On macOS the file picker hides dotted folders: press Cmd+Shift+G and paste"
+  echo "    the path above. On Windows, paste it into the file name field.)"
+}
+
+REGISTER="$SCRIPT_DIR/lib/register-figma-plugin.mjs"
+IMPORTED="no"
+
+if [ "$IMPORT" = "no" ]; then
+  warn "Skipped (--no-import)."
+  manual_import
+elif [ ! -f "$REGISTER" ]; then
+  warn "lib/register-figma-plugin.mjs is missing from this checkout."
+  manual_import
+else
+  DETAIL="$(node "$REGISTER" "$MANIFEST" 2>&1)"
+  RC=$?
+  detail() { [ -n "$DETAIL" ] && printf '%s\n' "$DETAIL" | sed 's/^/      /'; }
+  case "$RC" in
+    0)
+      ok "Imported. It will show up under Plugins → Development next time Figma starts."
+      detail
+      IMPORTED="yes" ;;
+    10)
+      ok "Already imported — Figma's plugin list was left untouched."
+      IMPORTED="yes" ;;
+    20)
+      warn "Figma Desktop is open. It rewrites its settings file as it runs, so the import"
+      echo "      would be lost. Two ways forward:"
+      echo
+      echo "      • Quit Figma completely (Cmd+Q / File → Exit — not just the window),"
+      echo "        then run this installer again. Everything else is already done."
+      echo "      • Or leave Figma open and import by hand:"
+      manual_import ;;
+    30)
+      warn "Could not find Figma Desktop's settings file, so the import was skipped."
+      echo "      Launch Figma Desktop once (that creates it) and re-run this installer,"
+      echo "      or just import by hand:"
+      manual_import ;;
+    *)
+      warn "The automatic import did not go through. Nothing was broken — if Figma's"
+      echo "      settings file was touched at all, a copy sits next to it as"
+      echo "      settings.json.figma-bridge-backup-*. Reason:"
+      detail
+      echo
+      echo "      Import by hand instead:"
+      manual_import ;;
+  esac
+fi
+
+# -------------------------------------------------------------- 5. what's left
 echo
-echo "   a. Open Figma Desktop → Plugins → Development → Import plugin from manifest…"
-echo "      and select this file:"
+bold "5. Last step"
 echo
-printf '         \033[1m%s\033[0m\n' "$MANIFEST"
+if [ "$IMPORTED" = "yes" ]; then
+  echo "   Open Figma Desktop (restart it if it was running), then in any file:"
+else
+  echo "   Once the plugin is imported, in any Figma file:"
+fi
+echo "   Plugins → Development → Figma Desktop Bridge — and run it."
 echo
-echo "   b. Open any Figma file → Plugins → Development → Figma Desktop Bridge, and run it."
-echo "      Leave it running. It finds the server by itself (WebSocket, ports 9223–9232)."
-echo
+echo "   Leave it running. It finds the server on its own (WebSocket, ports 9223–9232)."
 echo "   Then restart your AI client and ask it: \"Check Figma status\""
 echo
